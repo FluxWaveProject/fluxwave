@@ -1,0 +1,102 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fluxwave"
+version = "0.2.0"
+description = "A modern async Lavalink client library for Python Discord music bots."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "FluxWave Contributors" },
+]
+keywords = ["discord", "lavalink", "music", "asyncio", "bot"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+dependencies = [
+    "aiohttp>=3.9,<4",
+]
+
+[project.optional-dependencies]
+# Convenience extras so users can install FluxWave and a Discord library in one
+# command, e.g. `pip install fluxwave[discordpy]`. FluxWave itself depends only
+# on aiohttp and auto-detects whichever supported library is installed.
+discordpy = ["discord.py>=2.4,<3"]
+pycord = ["py-cord>=2.4,<3"]
+nextcord = ["nextcord>=2.6,<3"]
+disnake = ["disnake>=2.9,<3"]
+dev = [
+    "discord.py>=2.4,<3",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+docs = [
+    "myst-parser>=4",
+    "sphinx>=8",
+    "furo>=2024.8.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/FluxWaveProject/fluxwave"
+Repository = "https://github.com/FluxWaveProject/fluxwave"
+Documentation = "https://fluxwave.readthedocs.io"
+Issues = "https://github.com/FluxWaveProject/fluxwave/issues"
+Changelog = "https://github.com/FluxWaveProject/fluxwave/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fluxwave"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: tests that require an external Lavalink server",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "ANN",
+    "ASYNC",
+    "B",
+    "C4",
+    "E",
+    "F",
+    "I",
+    "PERF",
+    "PTH",
+    "RUF",
+    "SIM",
+    "UP",
+    "W",
+]
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["fluxwave"]
+warn_unused_configs = true
+warn_unused_ignores = true

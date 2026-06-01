@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / usage help
+    url: https://github.com/NobitaDeveloper/fluxwave/discussions
+    about: Ask questions and get help here instead of opening an issue.
+  - name: Documentation
+    url: https://github.com/NobitaDeveloper/fluxwave/tree/main/docs
+    about: Guides, API reference, and the FAQ.
