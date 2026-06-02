@@ -11,7 +11,7 @@ It provides the Lavalink REST and websocket client, Discord voice integration,
 node pooling, queueing, filters, events, plugin helpers, autoplay, persistence,
 and production-oriented recovery tools.
 
-FluxWave is `0.2.1` (beta). It is usable in real bots today; being pre-`1.0`,
+FluxWave is `0.2.2` (beta). It is usable in real bots today; being pre-`1.0`,
 some public APIs may still change before `1.0`.
 
 ## Features

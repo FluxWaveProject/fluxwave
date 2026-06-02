@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-FluxWave is pre-`1.0` (`0.2.1`). Security fixes are applied to the latest
+FluxWave is pre-`1.0` (`0.2.2`). Security fixes are applied to the latest
 release on `main`. Pin a version you have reviewed for production use.
 
 ## Reporting a vulnerability

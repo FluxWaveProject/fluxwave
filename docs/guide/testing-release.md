@@ -86,8 +86,8 @@ start with `v`.
 Example:
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
 The workflow builds distributions, publishes them to PyPI through trusted
@@ -95,7 +95,7 @@ publishing, and creates a GitHub release with the built artifacts.
 
 ## Versioning
 
-Current version: `0.2.1`.
+Current version: `0.2.2`.
 
 Before `1.0`, public APIs may change. After `1.0`, breaking changes should use
 a major version bump.

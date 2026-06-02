@@ -6,6 +6,12 @@ to follow [Semantic Versioning](https://semver.org/) once it reaches `1.0`.
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-06-02
+
+### Changed
+
+- Re-published package metadata without the README comparison table.
+
 ## [0.2.1] — 2026-06-02
 
 ### Changed

@@ -1,6 +1,6 @@
 # API Stability
 
-FluxWave is currently `0.2.1`, which means it is pre-release software.
+FluxWave is currently `0.2.2`, which means it is pre-release software.
 
 The API is usable for beta bots, testing, and feedback, but public names may
 still change before `1.0`.
