@@ -11,7 +11,7 @@ It provides the Lavalink REST and websocket client, Discord voice integration,
 node pooling, queueing, filters, events, plugin helpers, autoplay, persistence,
 and production-oriented recovery tools.
 
-FluxWave is `0.2.0` (beta). It is usable in real bots today; being pre-`1.0`,
+FluxWave is `0.2.1` (beta). It is usable in real bots today; being pre-`1.0`,
 some public APIs may still change before `1.0`.
 
 ## Features
@@ -40,6 +40,40 @@ some public APIs may still change before `1.0`.
 - **Autoplay** — recommendation providers with duplicate filtering.
 - **Persistence & observability** — in-memory and crash-safe on-disk state
   stores, metrics, and structured tracing.
+
+## Comparison
+
+This table compares built-in, publicly documented features checked on
+2026-06-02. A `✅` means the project advertises or ships the feature directly;
+a `❌` means it is not advertised as a built-in feature in the linked public
+docs/README and may still be possible with custom bot code.
+
+| Feature | FluxWave | Wavelink | Pomice | Mafic | Lavalink.py |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| Lavalink wrapper/client | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Supports discord.py, py-cord, nextcord, and disnake | ✅ | ❌ | ❌ | ✅ | ✅ |
+| Typed public API | ✅ | ✅ | ❌ | ✅ | ❌ |
+| Node pool / multi-node management | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Automatic player failover and return-to-home recovery | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Built-in queue | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Advanced queue controls: history, move, dedupe, capacity | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Autoplay / recommendation mode | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 30+ named filter presets | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Tagged filters / remove by tag | ✅ | ❌ | ✅ | ❌ | ❌ |
+| In-flight duplicate search coalescing | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Parallel multi-node search helper | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Source routing by query glob | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Crossfade / smooth fade-volume helper | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Live synced lyrics iterator | ✅ | ❌ | ❌ | ❌ | ❌ |
+| On-disk player state persistence | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Voice watchdog for stalled-audio recovery | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Built-in app metrics counters and trace ring buffer | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+Sources checked: [Wavelink](https://github.com/PythonistaGuild/Wavelink),
+[Pomice](https://pypi.org/project/pomice/),
+[Mafic](https://github.com/ooliver1/mafic), and
+[Lavalink.py](https://github.com/devoxin/Lavalink.py), plus the
+[official Lavalink client list](https://lavalink.dev/clients.html).
 
 ## Documentation
 

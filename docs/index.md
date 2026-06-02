@@ -7,7 +7,7 @@ filters, events, plugin helpers, autoplay, persistence, metrics, tracing, and
 voice recovery tools.
 
 ```{warning}
-FluxWave `0.2.0` is pre-release software. It is suitable for beta bots and
+FluxWave `0.2.1` is pre-release software. It is suitable for beta bots and
 library testing, but APIs may still change before `1.0`.
 ```
 

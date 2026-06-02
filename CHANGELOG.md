@@ -6,6 +6,13 @@ to follow [Semantic Versioning](https://semver.org/) once it reaches `1.0`.
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-06-02
+
+### Changed
+
+- Re-published package metadata so PyPI points at the new
+  `FluxWaveProject/fluxwave` GitHub organization repository.
+
 ## [0.2.0] — 2026-06-02
 
 ### Added
