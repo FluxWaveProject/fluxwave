@@ -83,3 +83,30 @@ async def test_sponsorblock_categories_require_session() -> None:
 
     with pytest.raises(fluxwave.NodeError):
         await fluxwave.SponsorBlockClient(node).categories(123)
+
+
+async def test_lavasearch_helpers_route_to_plugin_endpoints() -> None:
+    node = FakePluginNode()
+    helpers = fluxwave.PluginHelpers(node)
+
+    await helpers.lavasearch.tracks("song")
+    await helpers.lavasearch.albums("album")
+    await helpers.lavasearch.artists("artist")
+    await helpers.lavasearch.playlists("playlist")
+    await helpers.lavasearch.text("words")
+
+    assert node.requests == [
+        ("GET", "/v4/lavasearch/tracks", {"query": "song"}, None),
+        ("GET", "/v4/lavasearch/albums", {"query": "album"}, None),
+        ("GET", "/v4/lavasearch/artists", {"query": "artist"}, None),
+        ("GET", "/v4/lavasearch/playlists", {"query": "playlist"}, None),
+        ("GET", "/v4/lavasearch/text", {"query": "words"}, None),
+    ]
+
+
+async def test_lavadspx_builds_plugin_filters() -> None:
+    node = FakePluginNode()
+
+    filters = fluxwave.PluginHelpers(node).lavadspx.filters(echo={"delay": 0.5})
+
+    assert filters.to_payload() == {"pluginFilters": {"lavadspx": {"echo": {"delay": 0.5}}}}

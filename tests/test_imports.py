@@ -5,7 +5,7 @@ from fluxwave.__main__ import debug_info, main
 
 
 def test_public_version() -> None:
-    assert fluxwave.__version__ == "0.2.2"
+    assert fluxwave.__version__ == "0.3.0"
 
 
 def test_node_pool_starts_empty() -> None:

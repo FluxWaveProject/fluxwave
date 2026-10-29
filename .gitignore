@@ -5,6 +5,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+.coverage
+coverage.xml
+htmlcov/
 build/
 dist/
 docs/_build/

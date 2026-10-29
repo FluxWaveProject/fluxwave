@@ -36,7 +36,11 @@ Constructor highlights:
 - `resume_timeout`: Lavalink session resume timeout in seconds.
 - `search_cache_capacity`: optional node-local LFU cache size.
 - `inactive_player_timeout`, `inactive_channel_tokens`: player defaults.
+- `rate_limiter`: optional `RateLimiter` for REST request throttling.
 - `validate_version`: validate Lavalink compatibility before websocket connect.
+  Detects NodeLink through `/v4/info`, falls back to that endpoint when
+  `/version` is not Lavalink-shaped, and warns on unknown v4-compatible servers
+  unless `strict_version_check=True`.
 - `strict_version_check`: fail instead of warning on newer-than-tested v4 nodes.
 
 Common methods:
@@ -104,7 +108,8 @@ Connection and lifecycle:
 - `connect(timeout=60, reconnect=False, self_deaf=False, self_mute=False)`.
 - `move_to(channel, timeout=60)`.
 - `disconnect(force=False)`.
-- `destroy()`.
+- `destroy()` — best-effort; local player state is cleared even if the node REST
+  call fails.
 - `switch_node(new_node)`.
 - `recover_voice_state()`.
 
@@ -141,6 +146,8 @@ Lyrics and plugins:
 - `live_lyrics(lyrics=None, poll_interval=0.5)` — async iterator yielding the
   current synced lyric line as the track plays; raises `LyricsError` when the
   track has no synced lyrics.
+- `enable_sponsorblock(config=None, categories=None, action=SponsorBlockAction.SKIP, skip_margin=250)`
+  and `disable_sponsorblock()`; `sponsorblock` returns the active manager.
 
 Safety and reliability:
 
@@ -178,6 +185,8 @@ Helpers:
 - `track.with_user_data(...)`.
 - `track.with_playlist(playlist_info)`.
 - `track.as_recommended()`.
+- `track.encode()` and `Track.decode(encoded)` round-trip Lavalink's base64
+  track strings locally; invalid input raises `TrackDecodeError`.
 
 ### `Playlist`
 
@@ -259,17 +268,18 @@ Players also provide a Pomice-style tagged filter stack for command UIs:
 Typed event payloads:
 
 - `NodeReadyEvent`, `NodeDisconnectedEvent`, `NodeClosedEvent`.
+- `PlayerConnectEvent`, `PlayerDisconnectEvent`.
 - `PlayerUpdateEvent`, `StatsUpdateEvent`.
 - `TrackStartEvent`, `TrackEndEvent`, `TrackExceptionEvent`,
   `TrackStuckEvent`.
+- `SponsorBlockSkipEvent`.
 - `WebSocketClosedEvent`, `InactivePlayerEvent`, `ExtraEvent`, `PluginEvent`.
 
 Register global listeners:
 
 ```python
 @fluxwave.listen("track_start")  # register a global listener for the track_start event
-async def on_track_start(event: fluxwave.TrackStartEvent) -> None:
-    ...
+async def on_track_start(event: fluxwave.TrackStartEvent) -> None: ...
 ```
 
 Discord clients receive names like `fluxwave_track_start` and
@@ -285,6 +295,15 @@ Discord clients receive names like `fluxwave_track_start` and
   mode, auto queue/history, recommendation seeds, filters, and caller `extra`.
 - `EventTracer`, `TraceCategory`, `TraceEvent`, `tracer`.
 - `WrapperMetrics`, `NodeMetrics`, `metrics`.
+- `PrometheusExporter`, `OpenTelemetryExporter` — render or push metrics/traces
+  to Prometheus or any OpenTelemetry `Meter`.
+- `RateLimiter` — client-side REST limiting with server-driven backoff.
+- `SponsorBlockConfig`, `SponsorBlockAction`, `SponsorBlockManager`,
+  `SponsorSegment` — opt-in SponsorBlock skipping (`player.enable_sponsorblock()`).
+- `SavedPlaylist`, `PlaylistManager`, `PlaylistStore`, `MemoryPlaylistStore`,
+  `FilePlaylistStore` — named playlist CRUD (`PlaylistError`,
+  `PlaylistNotFound`, `PlaylistAlreadyExists`).
+- `NowPlaying`, `QueueView` — library-agnostic embed field/dict view models.
 - `SourceRouter`, `SourceRoute`.
 - `LFUCache`.
 
@@ -307,7 +326,9 @@ Lowercase compatibility aliases are also available:
 Use strings for plugin-specific prefixes:
 
 ```python
-await fluxwave.Pool.search("artist track", source="spsearch")  # use a plugin prefix to search Spotify
+await fluxwave.Pool.search(
+    "artist track", source="spsearch"
+)  # use a plugin prefix to search Spotify
 ```
 
 ### `build_search_query`
@@ -350,6 +371,10 @@ Payload classes:
 - `LavaSrcClient`: LavaSrc-style helper routes.
 - `SponsorBlockClient`: SponsorBlock category routes plus best-effort
   segment/chapter helpers for compatible custom builds.
+- `LavaSearchClient` (`node.plugins.lavasearch`): `tracks`, `albums`, `artists`,
+  `playlists`, and `text`.
+- `LavaDSPXClient` (`node.plugins.lavadspx`): `filters(**effects)` returns a
+  `Filters` with LavaDSPX `pluginFilters` applied.
 - `PluginClient`: custom plugin request helper.
 
 Plugin responses are intentionally flexible because Lavalink plugins vary by

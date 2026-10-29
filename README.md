@@ -11,7 +11,7 @@ It provides the Lavalink REST and websocket client, Discord voice integration,
 node pooling, queueing, filters, events, plugin helpers, autoplay, persistence,
 and production-oriented recovery tools.
 
-FluxWave is `0.2.2` (beta). It is usable in real bots today; being pre-`1.0`,
+FluxWave is `0.3.0` (beta). It is usable in real bots today; being pre-`1.0`,
 some public APIs may still change before `1.0`.
 
 ## Features
@@ -34,12 +34,17 @@ some public APIs may still change before `1.0`.
   caching, and in-flight request coalescing.
 - **Events** — typed payloads with `fluxwave_*` and Wavelink-style aliases, plus
   a raw-websocket event for debugging.
-- **Plugins** — LavaSrc, LavaLyrics, SponsorBlock, and custom REST routes.
+- **Plugins** — LavaSrc, LavaLyrics, LavaSearch, LavaDSPX, SponsorBlock
+  (including opt-in client-side segment skipping), and custom REST routes.
 - **Lyrics** — fetch full/plain lyrics, plus `live_lyrics()` to stream synced
   lines as the track plays for karaoke-style now-playing messages.
+- **Playlists** — named, per-user playlist CRUD over in-memory or crash-safe
+  file stores (bring your own `PlaylistStore`).
 - **Autoplay** — recommendation providers with duplicate filtering.
 - **Persistence & observability** — in-memory and crash-safe on-disk state
-  stores, metrics, and structured tracing.
+  stores, metrics, structured tracing, a client-side REST `RateLimiter`, and
+  Prometheus/OpenTelemetry exporters. `NowPlaying` and `QueueView` render
+  now-playing and queue embeds for any Discord library.
 
 ## Documentation
 
@@ -140,13 +145,17 @@ async def setup_hook() -> None:
 
 @bot.command()
 async def play(ctx: commands.Context, *, query: str) -> None:
-    if ctx.author.voice is None or ctx.author.voice.channel is None:  # caller must be in a voice channel
+    if (
+        ctx.author.voice is None or ctx.author.voice.channel is None
+    ):  # caller must be in a voice channel
         await ctx.reply("Join a voice channel first.")
         return
 
     player = ctx.voice_client  # existing voice connection, if any
     if not isinstance(player, fluxwave.FluxPlayer):
-        player = await ctx.author.voice.channel.connect(cls=fluxwave.FluxPlayer)  # join voice as a FluxPlayer
+        player = await ctx.author.voice.channel.connect(
+            cls=fluxwave.FluxPlayer
+        )  # join voice as a FluxPlayer
 
     result = await player.enqueue(query)  # search and add tracks to the queue
     if result.added == 0:  # nothing matched the query
@@ -221,7 +230,9 @@ player = await voice_channel.connect(cls=fluxwave.FluxPlayer)  # join voice as a
 await player.enqueue("ytsearch:lofi beats")  # search and add tracks to the queue
 await player.skip(force=True)  # advance to the next track now
 await player.set_volume(80)  # volume as a percentage
-await player.set_filters(fluxwave.Filters().nightcore(), seek=True)  # nightcore effect, re-seek so it applies now
+await player.set_filters(
+    fluxwave.Filters().nightcore(), seek=True
+)  # nightcore effect, re-seek so it applies now
 ```
 
 ### Queue
@@ -276,7 +287,9 @@ Read more: [Persistence and Observability](https://fluxwave.readthedocs.io/en/la
 
 ```python
 watchdog = player.start_watchdog(  # monitor for stalled playback
-    fluxwave.WatchdogConfig(check_interval=5.0, stagnation_threshold=12.0)  # poll every 5s, recover after 12s stalled
+    fluxwave.WatchdogConfig(
+        check_interval=5.0, stagnation_threshold=12.0
+    )  # poll every 5s, recover after 12s stalled
 )
 ```
 
@@ -291,7 +304,9 @@ await player.play_next("song name")  # queue a track to play next
 await player.skip(force=True)  # advance to the next track now
 await player.stop(force=True)  # stop and clear the queue
 await player.stop(clear_queue=False)  # stop current track but keep queue
-await player.set_filters(fluxwave.Filters().bass_boost(), seek=True)  # bass boost, re-seek so it applies now
+await player.set_filters(
+    fluxwave.Filters().bass_boost(), seek=True
+)  # bass boost, re-seek so it applies now
 lyrics = await player.current_lyrics()  # fetch lyrics for the current track
 state = player.save_state()  # snapshot player + queue
 ```

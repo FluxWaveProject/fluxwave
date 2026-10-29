@@ -70,7 +70,9 @@ explicit ownership, create and keep a `NodePool` instance instead.
 ```python
 player = ctx.voice_client  # existing voice connection, if any
 if not isinstance(player, fluxwave.FluxPlayer):
-    player = await ctx.author.voice.channel.connect(cls=fluxwave.FluxPlayer)  # join voice as a FluxPlayer
+    player = await ctx.author.voice.channel.connect(
+        cls=fluxwave.FluxPlayer
+    )  # join voice as a FluxPlayer
 ```
 
 ## 5. Queue and Play

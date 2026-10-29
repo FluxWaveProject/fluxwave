@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TypeAlias
 
+from .sponsorblock import SponsorSegment
 from .tracks import PlayerState, Stats, Track
 from .types import JsonObject
 
@@ -26,6 +27,8 @@ class EventType(StrEnum):
     NODE_READY = "node_ready"
     NODE_DISCONNECTED = "node_disconnected"
     NODE_CLOSED = "node_closed"
+    PLAYER_CONNECT = "connect"
+    PLAYER_DISCONNECT = "disconnect"
     PLAYER_UPDATE = "player_update"
     STATS_UPDATE = "stats_update"
     TRACK_START = "track_start"
@@ -37,6 +40,7 @@ class EventType(StrEnum):
     EXTRA_EVENT = "extra_event"
     PLUGIN_EVENT = "plugin_event"
     INACTIVE_PLAYER = "inactive_player"
+    SPONSORBLOCK_SKIP = "sponsorblock_skip"
 
 
 class EventDispatcher:
@@ -251,11 +255,45 @@ class InactivePlayerEvent:
     node_identifier: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class PlayerConnectEvent:
+    """Dispatched once a player's voice handshake reaches Lavalink."""
+
+    guild_id: int
+    channel_id: int | None = None
+    node_identifier: str | None = None
+    player: object | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerDisconnectEvent:
+    """Dispatched when a player is destroyed or disconnects from voice."""
+
+    guild_id: int
+    node_identifier: str | None = None
+    player: object | None = None
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SponsorBlockSkipEvent:
+    """Dispatched when the playhead enters a SponsorBlock segment."""
+
+    guild_id: int
+    segment: SponsorSegment
+    position: int
+    skipped: bool = False
+    node_identifier: str | None = None
+    player: object | None = None
+
+
 PluginEvent = ExtraEvent
 EventPayload = (
     NodeReadyEvent
     | NodeDisconnectedEvent
     | NodeClosedEvent
+    | PlayerConnectEvent
+    | PlayerDisconnectEvent
     | PlayerUpdateEvent
     | StatsUpdateEvent
     | TrackStartEvent
@@ -266,6 +304,7 @@ EventPayload = (
     | RawWebSocketEvent
     | ExtraEvent
     | InactivePlayerEvent
+    | SponsorBlockSkipEvent
 )
 
 

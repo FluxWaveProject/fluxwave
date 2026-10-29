@@ -1,6 +1,6 @@
 project = "FluxWave"
-copyright = "2026, FluxWave Contributors"
-author = "FluxWave Contributors"
+copyright = "2026, NobitaDeveloper and wanderer-npm"
+author = "NobitaDeveloper and wanderer-npm"
 
 extensions = [
     "myst_parser",

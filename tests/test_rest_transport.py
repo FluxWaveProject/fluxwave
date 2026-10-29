@@ -111,3 +111,72 @@ async def test_rest_request_parses_text_and_empty_responses() -> None:
 
     assert await client.request("GET", "/version") == "4.0.0"
     assert await client.request("DELETE", "/v4/sessions/session/players/123") is None
+
+
+class RecordingLimiter(fluxwave.RateLimiter):
+    def __init__(self) -> None:
+        super().__init__(rate=None)
+        self.penalties: list[float] = []
+        self.seen_headers: list[dict[str, str]] = []
+
+    def penalize(self, seconds: float) -> None:
+        self.penalties.append(seconds)
+
+    def update_from_headers(self, headers: object) -> None:
+        self.seen_headers.append(dict(headers))  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_rest_request_retries_429_and_honours_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr("fluxwave.rest.asyncio.sleep", fake_sleep)
+    session = FakeSession(
+        FakeResponse(status=429, headers={"Retry-After": "0.25"}),
+        FakeResponse(headers={"Content-Type": "application/json"}, json_data={"ok": True}),
+    )
+    client = fluxwave.RestClient(
+        "http://localhost:2333",
+        password="password",
+        user_id=123,
+        session=session,  # type: ignore[arg-type]
+        retries=1,
+        retry_base_delay=0,
+    )
+
+    assert await client.request("GET", "/v4/test") == {"ok": True}
+    assert sleeps == [0.25]
+
+
+@pytest.mark.asyncio
+async def test_rest_request_notifies_rate_limiter_on_429() -> None:
+    limiter = RecordingLimiter()
+    session = FakeSession(
+        FakeResponse(
+            status=429,
+            headers={
+                "Retry-After": "0.5",
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset-After": "2",
+            },
+        ),
+        FakeResponse(headers={"Content-Type": "application/json"}, json_data={"ok": True}),
+    )
+    client = fluxwave.RestClient(
+        "http://localhost:2333",
+        password="password",
+        user_id=123,
+        session=session,  # type: ignore[arg-type]
+        retries=1,
+        retry_base_delay=0,
+        rate_limiter=limiter,
+    )
+
+    assert await client.request("GET", "/v4/test") == {"ok": True}
+    assert limiter.penalties
+    assert limiter.seen_headers

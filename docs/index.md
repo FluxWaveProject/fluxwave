@@ -7,7 +7,7 @@ filters, events, plugin helpers, autoplay, persistence, metrics, tracing, and
 voice recovery tools.
 
 ```{warning}
-FluxWave `0.2.2` is pre-release software. It is suitable for beta bots and
+FluxWave `0.3.0` is pre-release software. It is suitable for beta bots and
 library testing, but APIs may still change before `1.0`.
 ```
 
@@ -62,6 +62,7 @@ await fluxwave.Pool.connect(nodes=[node], cache_capacity=256)  # register + conn
 - [Plugin Compatibility](guide/plugin-compatibility.md)
 - [Events](guide/events.md)
 - [Persistence and Observability](guide/persistence-observability.md)
+- [Playlists, SponsorBlock & Monitoring](guide/playlists-sponsorblock-monitoring.md)
 - [Advanced Features](guide/advanced.md)
 
 **Reference**
@@ -101,6 +102,7 @@ guide/plugins
 guide/plugin-compatibility
 guide/events
 guide/persistence-observability
+guide/playlists-sponsorblock-monitoring
 guide/advanced
 ```
 

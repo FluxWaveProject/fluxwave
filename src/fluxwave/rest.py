@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 from urllib.parse import quote
@@ -10,6 +11,7 @@ from urllib.parse import quote
 import aiohttp
 
 from .exceptions import LavalinkError, LavalinkErrorResponse, NodeError
+from .ratelimit import RateLimiter
 from .routeplanner import RoutePlannerStatus
 from .tracks import LavalinkPlayer, LoadResult, NodeInfo, Stats, Track, VoiceState
 from .types import JsonObject, JsonPayload
@@ -101,6 +103,7 @@ class RestClient:
     request_timeout: float = 15.0
     retries: int = 2
     retry_base_delay: float = 0.25
+    rate_limiter: RateLimiter | None = None
     _owns_session: bool = field(default=False, init=False)
 
     async def __aenter__(self) -> RestClient:
@@ -283,6 +286,8 @@ class RestClient:
         attempts = max(self.retries, 0) + 1
 
         for attempt in range(attempts):
+            if self.rate_limiter is not None:
+                await self.rate_limiter.acquire()
             try:
                 async with session.request(
                     method,
@@ -292,6 +297,17 @@ class RestClient:
                     headers=self.headers,
                     timeout=aiohttp.ClientTimeout(total=self.request_timeout),
                 ) as response:
+                    if response.status == 429:
+                        if self.rate_limiter is not None:
+                            self.rate_limiter.update_from_headers(response.headers)
+                            self.rate_limiter.penalize(_retry_after(response.headers))
+                        if attempt >= attempts - 1:
+                            return await self._parse_response(response)
+                        await asyncio.sleep(_retry_after(response.headers))
+                        continue
+
+                    if self.rate_limiter is not None:
+                        self.rate_limiter.update_from_headers(response.headers)
                     return await self._parse_response(response)
             except (aiohttp.ClientError, TimeoutError) as exc:
                 if attempt >= attempts - 1:
@@ -358,3 +374,17 @@ class RestClient:
             parsed = {}
 
         return LavalinkErrorResponse.from_payload(parsed, fallback_status=response.status)
+
+
+def _retry_after(headers: Mapping[str, str], *, default: float = 1.0) -> float:
+    """Return the seconds to wait from common rate-limit response headers."""
+
+    for header in ("Retry-After", "X-RateLimit-Reset-After"):
+        raw = headers.get(header)
+        if raw is None:
+            continue
+        try:
+            return max(float(raw), 0.0)
+        except ValueError:
+            continue
+    return default

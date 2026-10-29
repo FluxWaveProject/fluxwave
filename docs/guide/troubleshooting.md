@@ -12,6 +12,7 @@
 - [Node Fails or Becomes Overloaded](#node-fails-or-becomes-overloaded)
 - [Restoring State Fails](#restoring-state-fails)
 - [Lyrics or SponsorBlock Plugin Errors](#lyrics-or-sponsorblock-plugin-errors)
+- [Non-Lavalink v4 Servers](#non-lavalink-v4-servers-nodelink-and-similar)
 - [How to Report Bugs](#how-to-report-bugs)
 
 ## Bot Connects but No Audio Plays
@@ -61,7 +62,9 @@ Common causes:
 Use `source=None` for explicit prefixes:
 
 ```python
-await fluxwave.Pool.search("spsearch:artist track", source=None)  # source=None keeps the explicit prefix
+await fluxwave.Pool.search(
+    "spsearch:artist track", source=None
+)  # source=None keeps the explicit prefix
 ```
 
 ## Playlist Only Plays One Track
@@ -141,6 +144,27 @@ Common meanings:
 - `404 Not Found`: plugin missing, route differs, or no active Lavalink player.
 - `400 Bad Request`: payload shape is wrong for the plugin route.
 - `500 Internal Server Error`: the plugin or external provider failed.
+
+## Non-Lavalink v4 Servers (NodeLink and Similar)
+
+FluxWave targets the Lavalink v4 REST/websocket protocol. Servers that emulate
+that protocol (such as NodeLink) generally work, but a few differences can
+surface:
+
+- NodeLink's `/version` format (for example `v4-<build>`) and the version in
+  `/v4/info` do not match Lavalink's numbering. FluxWave checks `isNodelink` in
+  `/v4/info` and treats the node as v4-compatible instead of rejecting its
+  reported version.
+- For other servers, if `/version` is missing or does not return a
+  Lavalink-style version string, FluxWave falls back to `/v4/info` and then
+  warns and assumes a v4-compatible server. Use `strict_version_check=True` if
+  you want that to be a hard error.
+- If `player.disconnect()` logs a warning instead of raising, the node did not
+  answer `DELETE /v4/sessions/{id}/players/{guild}` in time. Local state is still
+  cleared. Confirm with `curl` against the same route: if `curl` also hangs, it is
+  a server-side issue.
+- Set `validate_version=False` to skip version probing entirely on servers that
+  do not implement `/version`.
 
 ## How to Report Bugs
 

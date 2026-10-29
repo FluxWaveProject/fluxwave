@@ -15,12 +15,16 @@ FluxWave has two event surfaces:
 
 ```python
 @bot.event
-async def on_fluxwave_track_start(event: fluxwave.TrackStartEvent) -> None:  # fires when a track starts playing
+async def on_fluxwave_track_start(
+    event: fluxwave.TrackStartEvent,
+) -> None:  # fires when a track starts playing
     print(event.player, event.track.title)
 
 
 @bot.event
-async def on_fluxwave_track_end(event: fluxwave.TrackEndEvent) -> None:  # fires when a track stops playing
+async def on_fluxwave_track_end(
+    event: fluxwave.TrackEndEvent,
+) -> None:  # fires when a track stops playing
     print(event.reason)  # why the track ended (finished, replaced, stopped, ...)
 ```
 
@@ -28,8 +32,38 @@ Wavelink-style aliases are also dispatched:
 
 ```python
 @bot.event
-async def on_wavelink_track_start(event: fluxwave.TrackStartEvent) -> None:  # Wavelink-style alias for track start
+async def on_wavelink_track_start(
+    event: fluxwave.TrackStartEvent,
+) -> None:  # Wavelink-style alias for track start
     ...
+```
+
+Voice connect and disconnect have their own events:
+
+```python
+@bot.event
+async def on_fluxwave_connect(
+    event: fluxwave.PlayerConnectEvent,
+) -> None:  # fires once the voice handshake reaches Lavalink
+    print(event.channel_id)
+
+
+@bot.event
+async def on_fluxwave_disconnect(
+    event: fluxwave.PlayerDisconnectEvent,
+) -> None:  # fires when the player is destroyed or leaves voice
+    print(event.reason)  # e.g. "destroyed"
+```
+
+When SponsorBlock skipping is enabled, each time the playhead enters a segment
+you get a `SponsorBlockSkipEvent`:
+
+```python
+@bot.event
+async def on_fluxwave_sponsorblock_skip(
+    event: fluxwave.SponsorBlockSkipEvent,
+) -> None:
+    print(event.segment.category, event.skipped)
 ```
 
 ## Global Listeners
@@ -46,8 +80,15 @@ owned by a single Discord player:
 ```python
 @fluxwave.listen("wavelink_node_closed")  # global listener for when a node disconnects
 async def on_node_closed(event: fluxwave.NodeClosedEvent) -> None:
-    print(event.identifier, event.disconnected_guild_ids)  # which node closed and the guilds it dropped
+    print(
+        event.identifier, event.disconnected_guild_ids
+    )  # which node closed and the guilds it dropped
 ```
+
+Node lifecycle events (`node_ready`, `node_disconnected`, `node_closed`, and
+`stats_update`) are forwarded to the global dispatcher under their plain name,
+`fluxwave_node_ready`, and `wavelink_node_ready` (and so on), so they can be
+heard without holding a node reference.
 
 Remove listeners when needed:
 

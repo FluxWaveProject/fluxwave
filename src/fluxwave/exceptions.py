@@ -91,6 +91,10 @@ class TrackLoadError(FluxWaveError):
         super().__init__(message)
 
 
+class TrackDecodeError(FluxWaveError):
+    """Raised when an encoded Lavalink track string cannot be decoded locally."""
+
+
 class LyricsError(FluxWaveError):
     """Raised when lyrics are unavailable or cannot be streamed for a track."""
 

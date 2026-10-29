@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import random
 from collections.abc import Callable, Iterator, MutableMapping
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol, overload
 
+from .exceptions import TrackDecodeError
 from .types import JsonObject, JsonValue
 
 if TYPE_CHECKING:
@@ -245,6 +248,70 @@ class Track:
             playlist=playlist,
             raw_data=payload.copy(),
         )
+
+    def encode(self) -> str:
+        """Return this track's Lavalink encoded string.
+
+        This is the value Lavalink expects when re-queuing a stored track and is
+        symmetric with :meth:`decode`.
+        """
+
+        return self.encoded
+
+    @classmethod
+    def decode(cls, encoded: str) -> Track:
+        """Build a track from a Lavalink encoded string without contacting a node.
+
+        Lavalink encodes tracks as a base64-wrapped binary message produced by
+        Lavaplayer's ``DefaultAudioPlayerManager#encodeTrack``. Decoding locally
+        lets a bot inspect and re-queue tracks loaded from a database, cache, or
+        user input without an extra REST round-trip::
+
+            track = fluxwave.Track.decode(stored_string)
+
+        Legacy base64-JSON payloads are still accepted for backwards
+        compatibility, but real Lavalink/NodeLink strings use the binary format.
+        """
+
+        raw = encoded.strip()
+        if not raw:
+            raise TrackDecodeError("Encoded track string cannot be empty.")
+
+        try:
+            padded = raw + "=" * (-len(raw) % 4)
+            data = base64.b64decode(padded, altchars=b"-_", validate=True)
+        except (ValueError, TypeError) as exc:
+            raise TrackDecodeError(
+                "Encoded track string is not valid Lavalink base64 data."
+            ) from exc
+
+        if not data:
+            raise TrackDecodeError("Encoded track string cannot be empty.")
+
+        stripped = data.lstrip()
+        if stripped.startswith((b"{", b"[")):
+            return cls._decode_json(raw, data)
+
+        return _decode_lavalink_track(raw, data)
+
+    @classmethod
+    def _decode_json(cls, raw: str, data: bytes) -> Track:
+        """Decode legacy base64-JSON track payloads."""
+
+        try:
+            payload = json.loads(data)
+        except (ValueError, TypeError, UnicodeDecodeError) as exc:
+            raise TrackDecodeError(
+                "Encoded track string is not valid Lavalink base64 JSON."
+            ) from exc
+
+        if not isinstance(payload, dict):
+            raise TrackDecodeError("Encoded track payload is not a JSON object.")
+
+        track = cls.from_payload(payload)
+        if not track.encoded:
+            track = replace(track, encoded=raw)
+        return track
 
     @property
     def title(self) -> str:
@@ -784,6 +851,8 @@ class NodeInfo:
     source_managers: list[str]
     filters: list[str]
     plugins: list[PluginInfo]
+    is_nodelink: bool = False
+    """Whether `/v4/info` identified the server as NodeLink."""
 
     @classmethod
     def from_payload(cls, payload: JsonObject) -> NodeInfo:
@@ -798,6 +867,7 @@ class NodeInfo:
             plugins=[
                 PluginInfo.from_payload(plugin) for plugin in _list_of_dicts(payload.get("plugins"))
             ],
+            is_nodelink=_bool(payload.get("isNodelink", payload.get("isNodeLink"))),
         )
 
 
@@ -833,7 +903,7 @@ class CpuStats:
         return cls(
             cores=_int(payload.get("cores")),
             system_load=_float(payload.get("systemLoad")),
-            lavalink_load=_float(payload.get("lavalinkLoad")),
+            lavalink_load=_float(payload.get("lavalinkLoad", payload.get("processLoad"))),
         )
 
 
@@ -948,6 +1018,179 @@ class LavalinkPlayer:
             voice=_dict(payload.get("voice")),
             filters=_dict(payload.get("filters")),
         )
+
+
+def _decode_lavalink_track(raw: str, data: bytes) -> Track:
+    """Decode Lavaplayer's framed binary track format.
+
+    Layout (all integers big-endian):
+
+    * 4-byte frame header: 2 flag bits + 30-bit message length
+    * optional version byte when the versioned flag is set
+    * title, author (Java ``writeUTF``)
+    * length (8-byte signed integer)
+    * identifier (Java ``writeUTF``)
+    * isStream (boolean)
+    * version >= 2: uri (nullable UTF)
+    * version >= 3: artworkUrl, isrc (nullable UTF)
+    * source name (Java ``writeUTF``), followed by source-specific data
+    * position (8-byte signed integer) at the end of the frame
+    """
+
+    if len(data) < 9:
+        raise TrackDecodeError("Encoded Lavalink track data is too short.")
+
+    header = int.from_bytes(data[:4], "big")
+    flags = (header >> 30) & 0x03
+    size = header & 0x3FFFFFFF
+    if size == 0:
+        raise TrackDecodeError("Encoded Lavalink track message is empty.")
+    if size > len(data) - 4:
+        raise TrackDecodeError("Encoded Lavalink track message is truncated.")
+
+    body = data[4 : 4 + size]
+    reader = _LavalinkReader(body)
+
+    version = reader.read_u8() if flags & 0x01 else 1
+    title = reader.read_utf()
+    author = reader.read_utf()
+    length = reader.read_long()
+    identifier = reader.read_utf()
+    is_stream = reader.read_bool()
+    uri = reader.read_nullable_utf() if version >= 2 else None
+    artwork_url = reader.read_nullable_utf() if version >= 3 else None
+    isrc = reader.read_nullable_utf() if version >= 3 else None
+    source_name = reader.read_utf()
+
+    if reader.offset > len(body) - 8:
+        raise TrackDecodeError("Encoded Lavalink track data is truncated.")
+
+    # The last field is always the initial position; source-specific data sits
+    # between the source name and this value and is not needed for metadata.
+    position = int.from_bytes(body[-8:], "big", signed=True)
+
+    info_payload: JsonObject = {
+        "identifier": identifier,
+        "isSeekable": not is_stream,
+        "author": author,
+        "length": length,
+        "isStream": is_stream,
+        "position": position,
+        "title": title,
+        "uri": uri,
+        "artworkUrl": artwork_url,
+        "isrc": isrc,
+        "sourceName": source_name,
+    }
+    payload: JsonObject = {"encoded": raw, "info": info_payload}
+
+    return Track(
+        encoded=raw,
+        info=TrackInfo.from_payload(info_payload),
+        raw_data=payload,
+    )
+
+
+class _LavalinkReader:
+    """Small bounds-checked reader for Lavaplayer's binary track frame."""
+
+    __slots__ = ("_data", "_offset")
+
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+        self._offset = 0
+
+    @property
+    def offset(self) -> int:
+        """Current read offset."""
+
+        return self._offset
+
+    def _take(self, count: int) -> bytes:
+        end = self._offset + count
+        if count < 0 or end > len(self._data):
+            raise TrackDecodeError("Encoded Lavalink track data is truncated.")
+        chunk = self._data[self._offset : end]
+        self._offset = end
+        return chunk
+
+    def read_u8(self) -> int:
+        """Read one unsigned byte."""
+
+        return self._take(1)[0]
+
+    def read_u16(self) -> int:
+        """Read one unsigned 16-bit integer."""
+
+        return int.from_bytes(self._take(2), "big")
+
+    def read_long(self) -> int:
+        """Read one signed 64-bit integer."""
+
+        return int.from_bytes(self._take(8), "big", signed=True)
+
+    def read_bool(self) -> bool:
+        """Read one Java boolean."""
+
+        return self.read_u8() != 0
+
+    def read_utf(self) -> str:
+        """Read a Java ``DataInput#readUTF`` string."""
+
+        length = self.read_u16()
+        return _decode_modified_utf8(self._take(length))
+
+    def read_nullable_utf(self) -> str | None:
+        """Read a Java ``writeNullableText`` value."""
+
+        return self.read_utf() if self.read_bool() else None
+
+
+def _decode_modified_utf8(data: bytes) -> str:
+    """Decode Java's modified UTF-8 (including CESU-8 surrogate pairs)."""
+
+    units: list[int] = []
+    index = 0
+    while index < len(data):
+        first = data[index]
+        if first < 0x80:
+            units.append(first)
+            index += 1
+        elif first & 0xE0 == 0xC0:
+            if index + 1 >= len(data) or data[index + 1] & 0xC0 != 0x80:
+                raise TrackDecodeError("Encoded Lavalink track has invalid UTF-8.")
+            units.append(((first & 0x1F) << 6) | (data[index + 1] & 0x3F))
+            index += 2
+        elif first & 0xF0 == 0xE0:
+            if (
+                index + 2 >= len(data)
+                or data[index + 1] & 0xC0 != 0x80
+                or data[index + 2] & 0xC0 != 0x80
+            ):
+                raise TrackDecodeError("Encoded Lavalink track has invalid UTF-8.")
+            units.append(
+                ((first & 0x0F) << 12) | ((data[index + 1] & 0x3F) << 6) | (data[index + 2] & 0x3F)
+            )
+            index += 3
+        else:
+            raise TrackDecodeError("Encoded Lavalink track has invalid UTF-8.")
+
+    chars: list[str] = []
+    index = 0
+    while index < len(units):
+        unit = units[index]
+        if (
+            0xD800 <= unit <= 0xDBFF
+            and index + 1 < len(units)
+            and 0xDC00 <= units[index + 1] <= 0xDFFF
+        ):
+            chars.append(chr(0x10000 + ((unit - 0xD800) << 10) + (units[index + 1] - 0xDC00)))
+            index += 2
+        else:
+            chars.append(chr(unit))
+            index += 1
+
+    return "".join(chars)
 
 
 def _str(value: object, *, default: str = "") -> str:

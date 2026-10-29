@@ -21,9 +21,12 @@ from .events import (
     NodeClosedEvent,
     NodeDisconnectedEvent,
     NodeReadyEvent,
+    PlayerConnectEvent,
+    PlayerDisconnectEvent,
     PlayerUpdateEvent,
     PluginEvent,
     RawWebSocketEvent,
+    SponsorBlockSkipEvent,
     StatsUpdateEvent,
     TrackEndEvent,
     TrackExceptionEvent,
@@ -52,9 +55,11 @@ from .exceptions import (
     QueueEmpty,
     QueueError,
     QueueFull,
+    TrackDecodeError,
     TrackLoadError,
     UnsupportedLavalinkVersion,
 )
+from .exporters import OpenTelemetryExporter, PrometheusExporter
 from .filters import (
     ChannelMixFilter,
     DistortionFilter,
@@ -69,7 +74,14 @@ from .filters import (
     TremoloFilter,
     VibratoFilter,
 )
-from .formatting import QueuePage, format_duration, paginate_queue, progress_bar
+from .formatting import (
+    NowPlaying,
+    QueuePage,
+    QueueView,
+    format_duration,
+    paginate_queue,
+    progress_bar,
+)
 from .metrics import WrapperMetrics, metrics
 from .node import (
     DEFAULT_REGION_GROUPS,
@@ -82,7 +94,19 @@ from .node import (
 )
 from .persistence import FileStore, MemoryStore, PersistedState, PersistenceBackend, capture
 from .player import FluxPlayer, Player
+from .playlists import (
+    FilePlaylistStore,
+    MemoryPlaylistStore,
+    PlaylistAlreadyExists,
+    PlaylistError,
+    PlaylistManager,
+    PlaylistNotFound,
+    PlaylistStore,
+    SavedPlaylist,
+)
 from .plugins import (
+    LavaDSPXClient,
+    LavaSearchClient,
     LavaSrcClient,
     LyricsClient,
     PluginClient,
@@ -91,11 +115,18 @@ from .plugins import (
 )
 from .pool import Pool
 from .queue import Queue, QueueMode
+from .ratelimit import RateLimiter
 from .rest import PlayerUpdate, RestClient, SessionUpdate
 from .results import EnqueueResult, LyricsLine, LyricsResult
 from .routeplanner import RoutePlannerStatus
 from .router import SourceRoute, SourceRouter
 from .search import SearchQuery, SearchSource, build_search_query
+from .sponsorblock import (
+    SponsorBlockAction,
+    SponsorBlockConfig,
+    SponsorBlockManager,
+    SponsorSegment,
+)
 from .tracing import EventTracer, TraceCategory, TraceEvent, tracer
 from .tracks import (
     Album,
@@ -154,6 +185,7 @@ __all__ = (
     "ExtrasNamespace",
     "FadeCurve",
     # persistence backends
+    "FilePlaylistStore",
     "FileStore",
     "FilterPreset",
     "Filters",
@@ -167,6 +199,8 @@ __all__ = (
     # cache
     "LFUCache",
     # plugins
+    "LavaDSPXClient",
+    "LavaSearchClient",
     "LavaSrcClient",
     "LavalinkError",
     "LavalinkErrorResponse",
@@ -183,6 +217,7 @@ __all__ = (
     "LyricsLine",
     "LyricsResult",
     # persistence
+    "MemoryPlaylistStore",
     "MemoryStore",
     "MultipleDiscordLibrariesError",
     "NoDiscordLibraryError",
@@ -197,21 +232,31 @@ __all__ = (
     "NodeReadyEvent",
     "NodeSelectionStrategy",
     "NodeStatus",
+    "NowPlaying",
+    "OpenTelemetryExporter",
     "PersistedState",
     "PersistenceBackend",
     "Player",
+    "PlayerConnectEvent",
+    "PlayerDisconnectEvent",
     "PlayerError",
     "PlayerState",
     # REST
     "PlayerUpdate",
     "PlayerUpdateEvent",
     "Playlist",
+    "PlaylistAlreadyExists",
+    "PlaylistError",
+    "PlaylistManager",
+    "PlaylistNotFound",
+    "PlaylistStore",
     "PluginClient",
     "PluginEvent",
     "PluginFiltersComponent",
     "PluginHelpers",
     # pool
     "Pool",
+    "PrometheusExporter",
     # queue
     "Queue",
     "QueueEmpty",
@@ -219,11 +264,15 @@ __all__ = (
     "QueueFull",
     "QueueMode",
     "QueuePage",
+    "QueueView",
+    "RateLimiter",
     "RawWebSocketEvent",
     "RecommendationProvider",
     "RestClient",
     "RotationFilter",
     "RoutePlannerStatus",
+    # playlists
+    "SavedPlaylist",
     # search
     "SearchQuery",
     "SearchRecommendationProvider",
@@ -232,13 +281,19 @@ __all__ = (
     # routing
     "SourceRoute",
     "SourceRouter",
+    "SponsorBlockAction",
     "SponsorBlockClient",
+    "SponsorBlockConfig",
+    "SponsorBlockManager",
+    "SponsorBlockSkipEvent",
+    "SponsorSegment",
     "Stats",
     "StatsUpdateEvent",
     "TimescaleFilter",
     "TraceCategory",
     "TraceEvent",
     "Track",
+    "TrackDecodeError",
     "TrackEndEvent",
     "TrackExceptionEvent",
     "TrackInfo",

@@ -192,6 +192,21 @@ def test_node_info_from_payload() -> None:
     assert info.version.major == 4
     assert info.git.commit == "sha"
     assert info.plugins[0].name == "plugin"
+    assert info.is_nodelink is False
+
+
+def test_node_info_detects_nodelink() -> None:
+    info = fluxwave.NodeInfo.from_payload(
+        {
+            "isNodelink": True,
+            "version": {"semver": "3.3.0", "major": 3, "minor": 3, "patch": 0},
+            "sourceManagers": ["youtube"],
+            "filters": ["echo"],
+        }
+    )
+
+    assert info.is_nodelink is True
+    assert info.version.semver == "3.3.0"
 
 
 def test_stats_from_payload() -> None:
@@ -210,3 +225,16 @@ def test_stats_from_payload() -> None:
     assert stats.memory.used == 2
     assert stats.frame_stats is not None
     assert stats.frame_stats.deficit == 1
+
+
+def test_stats_from_payload_accepts_nodelink_process_load() -> None:
+    stats = fluxwave.Stats.from_payload(
+        {
+            "cpu": {"cores": 4, "systemLoad": 0.3, "processLoad": 0.12},
+            "frameStats": {"sent": 10, "nulled": 0, "deficit": 1, "expected": 10},
+        }
+    )
+
+    assert stats.cpu.lavalink_load == 0.12
+    assert stats.frame_stats is not None
+    assert stats.frame_stats.sent == 10

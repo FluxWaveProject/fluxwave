@@ -4,7 +4,55 @@ All notable changes to FluxWave are documented in this file. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 to follow [Semantic Versioning](https://semver.org/) once it reaches `1.0`.
 
-## [Unreleased]
+## [0.3.0] — 2026-10-29
+
+### Added
+
+- `Track.encode()` and `Track.decode(encoded)` round-trip Lavalink's base64
+  binary track strings locally, so stored tracks can be inspected and re-queued
+  without a REST round-trip. Malformed input raises the new
+  `TrackDecodeError`.
+- New lifecycle events: `PlayerConnectEvent`, `PlayerDisconnectEvent`, and
+  `SponsorBlockSkipEvent`, with matching `EventType` members
+  (`connect`, `disconnect`, `sponsorblock_skip`).
+- Client-side SponsorBlock support via `player.enable_sponsorblock()` /
+  `disable_sponsorblock()` and the new `SponsorBlockConfig`,
+  `SponsorBlockAction`, `SponsorBlockManager`, and `SponsorSegment` types.
+  Segments are read from a track's `pluginInfo` or the node's SponsorBlock
+  plugin and skipped as the playhead enters them.
+- `RateLimiter`, an asyncio-friendly client-side REST limiter that also honours
+  server-driven `429` / `Retry-After` / `X-RateLimit-*` responses. Pass one to
+  `Node(..., rate_limiter=...)`.
+- Plugin helpers: `node.plugins.lavasearch` (tracks/albums/artists/playlists/
+  text) and `node.plugins.lavadspx.filters(...)`.
+- `PrometheusExporter` (dependency-free Prometheus text exposition) and
+  `OpenTelemetryExporter` (push `WrapperMetrics` and trace events into any
+  OpenTelemetry `Meter`).
+- Named playlist CRUD: `SavedPlaylist`, `PlaylistManager`, the `PlaylistStore`
+  protocol, and in-memory / file back-ends (`MemoryPlaylistStore`,
+  `FilePlaylistStore`) plus `PlaylistError`, `PlaylistNotFound`, and
+  `PlaylistAlreadyExists`.
+- Library-agnostic view models `NowPlaying` and `QueueView` that turn a player
+  or queue into `(name, value, inline)` embed fields or plain dicts.
+- Node lifecycle events (`node_ready`, `node_disconnected`, `node_closed`,
+  `stats_update`) are now also forwarded to the global event dispatcher under
+  their plain, `fluxwave_*`, and `wavelink_*` names.
+- Test coverage is now reported in CI via `pytest-cov`.
+
+### Changed
+
+- Player teardown is now best-effort: if the node times out or rejects
+  `DELETE /v4/sessions/{id}/players/{guild}`, FluxWave logs a warning, clears
+  the local player anyway, and no longer surfaces `NodeError` from
+  `player.disconnect()`. `Node.destroy_player()` also drops the local registry
+  entry even when the REST call fails.
+- Version validation now falls back to `/v4/info` when `/version` is missing or
+  not a Lavalink-style version. NodeLink is detected through `isNodelink` and
+  accepted as v4-compatible even though its own version numbering is not
+  Lavalink's; `NodeInfo.is_nodelink` exposes the detection. On non-strict setups
+  other unknown v4-compatible servers are warned about and assumed compatible
+  instead of refused; `strict_version_check=True` keeps the old refusal.
+- NodeLink's `cpu.processLoad` stats field is mapped onto `CpuStats.lavalink_load`.
 
 ## [0.2.2] — 2026-06-02
 

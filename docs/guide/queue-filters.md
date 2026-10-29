@@ -145,8 +145,12 @@ await player.set_filters(filters)  # apply the combined filters
 Tagged filter stack:
 
 ```python
-await player.add_filter(fluxwave.Filters().bass_boost(), filter_tag="bass")  # stack a filter under a tag
-await player.add_filter(fluxwave.Filters().nightcore(), filter_tag="nightcore")  # stack another tagged filter
+await player.add_filter(
+    fluxwave.Filters().bass_boost(), filter_tag="bass"
+)  # stack a filter under a tag
+await player.add_filter(
+    fluxwave.Filters().nightcore(), filter_tag="nightcore"
+)  # stack another tagged filter
 
 if player.has_filter("bass"):  # check if the tag is active
     await player.remove_filter("bass")  # remove just that tagged filter

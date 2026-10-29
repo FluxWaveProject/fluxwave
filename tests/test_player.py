@@ -1392,3 +1392,85 @@ async def test_live_lyrics_raises_for_unsynced_lyrics() -> None:
     agen = p.live_lyrics(poll_interval=0.01)
     with pytest.raises(fluxwave.LyricsError):
         await agen.__anext__()
+
+
+def _track_with_segments(*segments: dict[str, object]) -> fluxwave.Track:
+    payload = track("seg").raw_data.copy()
+    payload["pluginInfo"] = {"sponsorblock": list(segments)}
+    return fluxwave.Track.from_payload(payload)
+
+
+async def test_player_dispatches_connect_and_disconnect_events() -> None:
+    node = FakeNode()
+    p, client = player_with_client(node)
+    p._voice_token = "token"
+    p._voice_endpoint = "endpoint"
+    p._voice_session_id = "session"
+    p._voice_channel_id = "456"
+
+    await p._dispatch_voice_update()
+
+    names = [name for name, _ in client.events]
+    assert "fluxwave_connect" in names
+    assert isinstance(
+        next(payload for name, payload in client.events if name == "fluxwave_connect"),
+        fluxwave.PlayerConnectEvent,
+    )
+
+    await p.destroy()
+
+    assert "fluxwave_disconnect" in [name for name, _ in client.events]
+
+
+async def test_player_enable_and_disable_sponsorblock() -> None:
+    p = player(FakeNode())
+    p._current = _track_with_segments(
+        {"category": "sponsor", "start": 0, "end": 5000, "UUID": "u1"}
+    )
+
+    manager = p.enable_sponsorblock(categories=["sponsor"])
+
+    assert p.sponsorblock is manager
+    assert len(manager.segments) == 1
+
+    p.disable_sponsorblock()
+    assert p.sponsorblock is None
+
+
+async def test_player_sponsorblock_seeks_and_emits_skip_event() -> None:
+    node = FakeNode()
+    p, client = player_with_client(node)
+    p._current = _track_with_segments(
+        {"category": "sponsor", "start": 0, "end": 5000, "UUID": "u1"}
+    )
+    p.enable_sponsorblock(categories=["sponsor"])
+    node.updates.clear()
+
+    p._on_node_player_update(
+        fluxwave.PlayerUpdateEvent(
+            123,
+            state=fluxwave.PlayerState(time=1, position=1000, connected=True, ping=10),
+        )
+    )
+    await asyncio.sleep(0)
+
+    assert node.updates[-1].position == 5000
+    skip_events = [
+        payload for name, payload in client.events if name == "fluxwave_sponsorblock_skip"
+    ]
+    assert len(skip_events) == 1
+    assert skip_events[0].skipped is True
+    assert skip_events[0].position == 1000
+
+
+async def test_player_destroy_clears_state_when_node_delete_fails() -> None:
+    node = FailingDestroyNode()
+    p = player(node)
+    p._current = track()
+
+    await p.destroy()
+
+    assert node.destroyed == [123]
+    assert p.destroyed
+    assert p.current is None
+    assert not p.connected

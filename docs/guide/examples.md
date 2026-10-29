@@ -46,7 +46,9 @@ class MusicClient(discord.Client):
             identifier="main",
             search_cache_capacity=256,  # cache up to 256 search results on this node
         )
-        await fluxwave.Pool.connect(nodes=[node], cache_capacity=512)  # register nodes with the pool
+        await fluxwave.Pool.connect(
+            nodes=[node], cache_capacity=512
+        )  # register nodes with the pool
         await self.tree.sync()
 
 
@@ -135,7 +137,9 @@ class MyBot(commands.Bot):
             user_id=self.user.id,  # the bot's own Discord user id
             identifier="main",
         )
-        await fluxwave.Pool.connect(nodes=[node], cache_capacity=512)  # register nodes with the pool
+        await fluxwave.Pool.connect(
+            nodes=[node], cache_capacity=512
+        )  # register nodes with the pool
         await self.load_extension("cogs.music")  # load the commands cog
 
 
@@ -169,7 +173,9 @@ class Music(commands.Cog):
         if isinstance(ctx.voice_client, fluxwave.FluxPlayer):  # already connected
             return ctx.voice_client
 
-        return await channel.connect(cls=fluxwave.FluxPlayer)  # connect using FluxWave's player class
+        return await channel.connect(
+            cls=fluxwave.FluxPlayer
+        )  # connect using FluxWave's player class
 
     @commands.command()
     async def play(self, ctx: commands.Context, *, query: str) -> None:
@@ -180,7 +186,9 @@ class Music(commands.Cog):
         result = await player.enqueue(query)  # search and add matching tracks to the queue
         if player.current is None:  # nothing playing yet
             await player.skip(force=True)  # start the first queued track
-        await ctx.reply(result.message if result.added else "No tracks found.")  # report the outcome
+        await ctx.reply(
+            result.message if result.added else "No tracks found."
+        )  # report the outcome
 
 
 async def setup(bot: commands.Bot) -> None:

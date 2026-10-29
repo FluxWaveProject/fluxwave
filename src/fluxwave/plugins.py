@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from .exceptions import NodeError
+from .filters import Filters
 from .rest import HttpMethod, RestResponse
 from .search import Search
 from .types import JsonPayload
@@ -213,6 +214,65 @@ class SponsorBlockClient:
 
 
 @dataclass(frozen=True, slots=True)
+class LavaDSPXClient:
+    """Helpers for the LavaDSPX audio-filter plugin.
+
+    LavaDSPX applies effects through Lavalink's ``pluginFilters.lavadspx``
+    payload, so these helpers build a :class:`~fluxwave.Filters` container rather
+    than calling a REST route.
+    """
+
+    node: PluginNode
+
+    def filters(self, **effects: object) -> Filters:
+        """Return filters with LavaDSPX effects configured::
+
+        filters = node.plugins.lavadspx.filters(echo={"delay": 0.5})
+        """
+
+        return Filters().set_plugin_filters(lavadspx=effects)
+
+
+@dataclass(frozen=True, slots=True)
+class LavaSearchClient:
+    """REST helpers for the LavaSearch multi-source search plugin."""
+
+    node: PluginNode
+
+    async def tracks(self, query: str) -> RestResponse:
+        """Search tracks across all configured sources."""
+
+        return await self._search("tracks", query)
+
+    async def albums(self, query: str) -> RestResponse:
+        """Search albums across all configured sources."""
+
+        return await self._search("albums", query)
+
+    async def artists(self, query: str) -> RestResponse:
+        """Search artists across all configured sources."""
+
+        return await self._search("artists", query)
+
+    async def playlists(self, query: str) -> RestResponse:
+        """Search playlists across all configured sources."""
+
+        return await self._search("playlists", query)
+
+    async def text(self, query: str) -> RestResponse:
+        """Search plain text across all configured sources."""
+
+        return await self._search("text", query)
+
+    async def _search(self, resource: str, query: str) -> RestResponse:
+        return await self.node.custom_request(
+            "GET",
+            f"/v4/lavasearch/{resource}",
+            params={"query": query},
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class PluginHelpers:
     """Grouped plugin helpers for a node."""
 
@@ -229,6 +289,18 @@ class PluginHelpers:
         """LavaSrc search helpers."""
 
         return LavaSrcClient(self.node)
+
+    @property
+    def lavasearch(self) -> LavaSearchClient:
+        """LavaSearch multi-source search helpers."""
+
+        return LavaSearchClient(self.node)
+
+    @property
+    def lavadspx(self) -> LavaDSPXClient:
+        """LavaDSPX audio-filter helpers."""
+
+        return LavaDSPXClient(self.node)
 
     @property
     def lyrics(self) -> LyricsClient:

@@ -174,7 +174,9 @@ await player.fade_volume(100, duration=3)  # and back up
 
 ```python
 watchdog = player.start_watchdog(
-    fluxwave.WatchdogConfig(check_interval=5, stagnation_threshold=12)  # check every 5s, stall after 12s frozen
+    fluxwave.WatchdogConfig(
+        check_interval=5, stagnation_threshold=12
+    )  # check every 5s, stall after 12s frozen
 )
 ```
 

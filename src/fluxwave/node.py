@@ -33,13 +33,15 @@ from .events import (
 from .exceptions import InvalidNodeError, LavalinkError, NodeError, UnsupportedLavalinkVersion
 from .metrics import metrics
 from .plugins import PluginHelpers
+from .ratelimit import RateLimiter
 from .rest import HttpMethod, PlayerUpdate, RestClient, RestResponse, SessionUpdate
 from .routeplanner import RoutePlannerStatus
 from .search import Search, SearchSource, build_search_query, unwrap_load_result
 from .tracing import TraceCategory, tracer
 from .tracks import LavalinkPlayer, LoadResult, NodeInfo, Stats, Track
-from .types import JsonPayload
+from .types import JsonObject, JsonPayload
 from .versioning import (
+    SUPPORTED_LAVALINK_MAJOR,
     LavalinkVersion,
     LavalinkVersionCheck,
     LavalinkVersionWarning,
@@ -63,6 +65,16 @@ DEFAULT_REGION_GROUPS: dict[str, tuple[str, ...]] = {
 """Default Discord voice endpoint groups used for region-aware node selection."""
 
 _REGION_ENDPOINT_RE = re.compile(r"^(?:vip-)?(?P<region>[a-z-]+)\d*\.discord\.media", re.I)
+
+_GLOBAL_NODE_EVENTS = frozenset(
+    {
+        EventType.NODE_READY,
+        EventType.NODE_DISCONNECTED,
+        EventType.NODE_CLOSED,
+        EventType.STATS_UPDATE,
+    }
+)
+"""Node lifecycle events that are also forwarded to the global dispatcher."""
 
 
 class NodeStatus(StrEnum):
@@ -101,6 +113,7 @@ class Node:
     retry_base_delay: float = 0.5
     retry_max_delay: float = 30.0
     retry_jitter: bool = True
+    rate_limiter: RateLimiter | None = None
     resume_timeout: int = 60
     search_cache_capacity: int | None = None
     region: str | None = None
@@ -143,6 +156,7 @@ class Node:
             request_timeout=self.request_timeout,
             retries=0 if self.retries is None else self.retries,
             retry_base_delay=self.retry_base_delay,
+            rate_limiter=self.rate_limiter,
         )
 
     @property
@@ -221,9 +235,19 @@ class Node:
         self.events.remove(event, callback)
 
     def dispatch(self, event: EventName, payload: object) -> None:
-        """Dispatch an internal node event."""
+        """Dispatch an internal node event.
+
+        Lifecycle events (ready/disconnected/closed/stats) are also forwarded to
+        the global :mod:`fluxwave.events` dispatcher with ``fluxwave_*`` and
+        ``wavelink_*`` aliases so bot code can listen without a node reference.
+        """
 
         self.events.dispatch(event, payload)
+
+        if isinstance(event, EventType) and event in _GLOBAL_NODE_EVENTS:
+            dispatch_global_event(event, payload)
+            dispatch_global_event(f"fluxwave_{event.value}", payload)
+            dispatch_global_event(f"wavelink_{event.value}", payload)
 
     async def connect(self) -> None:
         """Connect the node websocket and wait for Lavalink's ready payload."""
@@ -311,9 +335,6 @@ class Node:
                 disconnected_players=tuple(disconnected_players),
             )
             self.dispatch(EventType.NODE_CLOSED, event)
-            dispatch_global_event(EventType.NODE_CLOSED, event)
-            dispatch_global_event("fluxwave_node_closed", event)
-            dispatch_global_event("wavelink_node_closed", event)
             await self.rest.close()
             await self.events.close()
             logger.debug(
@@ -356,17 +377,16 @@ class Node:
         FluxWave is a Lavalink v4 client. Unsupported major versions raise
         :class:`UnsupportedLavalinkVersion`. Newer-than-tested v4 builds emit a
         warning by default, or raise when `strict_version_check=True`.
+
+        Alternative v4-compatible servers (such as NodeLink) sometimes report
+        their own version format from `/version`. FluxWave identifies NodeLink
+        through `isNodelink` in `/v4/info`, otherwise falls back to that endpoint
+        for a Lavalink-style version, and finally — unless
+        `strict_version_check=True` — assumes a v4-compatible server and warns
+        instead of refusing to connect.
         """
 
-        try:
-            raw_version = await self.fetch_version()
-            parsed = parse_lavalink_version(raw_version)
-        except Exception as exc:
-            msg = (
-                f"Could not validate Lavalink version for node {self.identifier!r}. "
-                "Disable Node(validate_version=False) only if you know this server is Lavalink v4."
-            )
-            raise UnsupportedLavalinkVersion(msg) from exc
+        parsed = await self._resolve_lavalink_version()
 
         check = check_lavalink_version(parsed)
         self.lavalink_version = parsed
@@ -382,6 +402,93 @@ class Node:
             warnings.warn(message, LavalinkVersionWarning, stacklevel=2)
 
         return check
+
+    async def _resolve_lavalink_version(self) -> LavalinkVersion:
+        parsed: LavalinkVersion | None = None
+
+        try:
+            raw_version = await self.fetch_version()
+        except Exception as exc:
+            logger.debug("Could not validate /version for node %r: %s", self.identifier, exc)
+        else:
+            try:
+                parsed = parse_lavalink_version(raw_version)
+            except ValueError as exc:
+                logger.debug(
+                    "Could not parse /version %r for node %r: %s",
+                    raw_version,
+                    self.identifier,
+                    exc,
+                )
+            else:
+                if parsed.major == SUPPORTED_LAVALINK_MAJOR:
+                    return parsed
+
+        parsed_info = await self._version_from_info()
+        if parsed_info is not None:
+            logger.debug("Resolved node %r version from /v4/info: %s", self.identifier, parsed_info)
+            return parsed_info
+
+        if parsed is not None:
+            return parsed
+
+        message = (
+            f"Could not validate Lavalink version for node {self.identifier!r}. "
+            "Disable Node(validate_version=False) only if you know this server is Lavalink v4."
+        )
+        if self.strict_version_check:
+            raise UnsupportedLavalinkVersion(message)
+
+        warnings.warn(
+            f"Node {self.identifier!r} did not report a parseable Lavalink version; "
+            "assuming a v4-compatible server.",
+            LavalinkVersionWarning,
+            stacklevel=3,
+        )
+        return LavalinkVersion(4, 0, 0, raw="unknown")
+
+    async def _version_from_info(self) -> LavalinkVersion | None:
+        try:
+            payload = await self.rest.request("GET", "/v4/info")
+        except Exception:
+            return None
+
+        if not isinstance(payload, dict):
+            return None
+
+        version = payload.get("version")
+        if _is_nodelink(payload):
+            semver = version.get("semver") if isinstance(version, dict) else version
+            raw = f"NodeLink {semver}" if isinstance(semver, str) and semver else "NodeLink"
+            return LavalinkVersion(SUPPORTED_LAVALINK_MAJOR, 0, 0, raw=raw)
+
+        if isinstance(version, str):
+            try:
+                return parse_lavalink_version(version)
+            except ValueError:
+                return None
+
+        if not isinstance(version, dict):
+            return None
+
+        semver = version.get("semver")
+        if isinstance(semver, str):
+            try:
+                return parse_lavalink_version(semver)
+            except ValueError:
+                pass
+
+        major = version.get("major")
+        if not isinstance(major, int) or isinstance(major, bool):
+            return None
+        minor = version.get("minor")
+        patch = version.get("patch")
+        return LavalinkVersion(
+            major,
+            minor if isinstance(minor, int) and not isinstance(minor, bool) else 0,
+            patch if isinstance(patch, int) and not isinstance(patch, bool) else 0,
+            raw=semver if isinstance(semver, str) else "",
+        )
 
     async def fetch_routeplanner_status(self) -> RoutePlannerStatus | None:
         """Fetch Lavalink route planner status for this node."""
@@ -519,11 +626,17 @@ class Node:
             return player
 
     async def destroy_player(self, guild_id: int) -> None:
-        """Destroy a Lavalink player and remove it from the registry."""
+        """Destroy a Lavalink player and remove it from the registry.
+
+        The local registry is cleared even when the REST call fails, so a stale
+        entry cannot linger after a timeout or an already-destroyed session.
+        """
 
         async with self._player_lock:
-            await self.rest.destroy_player(self._require_session(), guild_id)
-            self.players.pop(guild_id, None)
+            try:
+                await self.rest.destroy_player(self._require_session(), guild_id)
+            finally:
+                self.players.pop(guild_id, None)
 
     async def custom_request(
         self,
@@ -1339,6 +1452,13 @@ def calculate_shard_id(guild_id: int, shard_count: int | None) -> int:
 
     count = shard_count if shard_count and shard_count > 0 else 1
     return (int(guild_id) >> 22) % count
+
+
+def _is_nodelink(payload: JsonObject) -> bool:
+    flag = payload.get("isNodelink", payload.get("isNodeLink"))
+    if isinstance(flag, bool):
+        return flag
+    return isinstance(flag, str) and flag.strip().lower() in {"true", "1", "yes"}
 
 
 def _normalize_region(region: str) -> str:

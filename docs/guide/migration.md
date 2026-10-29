@@ -41,7 +41,9 @@ Discord-style event aliases are also emitted:
 
 ```python
 @bot.event
-async def on_wavelink_track_start(event: fluxwave.TrackStartEvent) -> None:  # Wavelink-style event alias
+async def on_wavelink_track_start(
+    event: fluxwave.TrackStartEvent,
+) -> None:  # Wavelink-style event alias
     ...
 ```
 
@@ -49,7 +51,9 @@ Preferred FluxWave names use `fluxwave_`:
 
 ```python
 @bot.event
-async def on_fluxwave_track_start(event: fluxwave.TrackStartEvent) -> None:  # preferred FluxWave event name
+async def on_fluxwave_track_start(
+    event: fluxwave.TrackStartEvent,
+) -> None:  # preferred FluxWave event name
     ...
 ```
 
@@ -76,7 +80,9 @@ await pool.connect(node)  # connect a node to this pool
 ```
 
 ```python
-await fluxwave.Pool.connect(nodes=[node], cache_capacity=256)  # global style, convenient for simple bots
+await fluxwave.Pool.connect(
+    nodes=[node], cache_capacity=256
+)  # global style, convenient for simple bots
 ```
 
 The instance style is better for tests and applications with multiple bot
@@ -88,13 +94,17 @@ Plain text defaults to YouTube search unless you pass another source:
 
 ```python
 await fluxwave.Pool.search("song")  # defaults to YouTube search
-await fluxwave.Pool.search("song", source=fluxwave.SearchSource.YOUTUBE_MUSIC)  # search a specific source
+await fluxwave.Pool.search(
+    "song", source=fluxwave.SearchSource.YOUTUBE_MUSIC
+)  # search a specific source
 ```
 
 Use `source=None` when passing an explicit prefix or raw identifier:
 
 ```python
-await fluxwave.Pool.search("spsearch:artist track", source=None)  # source=None keeps your explicit prefix
+await fluxwave.Pool.search(
+    "spsearch:artist track", source=None
+)  # source=None keeps your explicit prefix
 ```
 
 ## Queue Modes

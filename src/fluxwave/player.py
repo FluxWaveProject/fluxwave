@@ -24,7 +24,10 @@ from .crossfade import Crossfade, CrossfadeConfig, FadeCurve, fade_fraction
 from .events import (
     EventType,
     InactivePlayerEvent,
+    PlayerConnectEvent,
+    PlayerDisconnectEvent,
     PlayerUpdateEvent,
+    SponsorBlockSkipEvent,
     TrackEndEvent,
     TrackStartEvent,
     WebSocketClosedEvent,
@@ -34,6 +37,7 @@ from .events import (
 )
 from .exceptions import (
     ChannelTimeoutError,
+    FluxWaveError,
     InvalidChannelError,
     InvalidNodeError,
     LavalinkError,
@@ -49,6 +53,15 @@ from .queue import Queue
 from .rest import PlayerUpdate
 from .results import EnqueueResult, LyricsLine, LyricsResult
 from .search import SearchSource
+from .sponsorblock import (
+    DEFAULT_CATEGORIES as DEFAULT_SPONSOR_CATEGORIES,
+)
+from .sponsorblock import (
+    SponsorBlockAction,
+    SponsorBlockConfig,
+    SponsorBlockManager,
+    SponsorSegment,
+)
 from .tracing import TraceCategory, tracer
 from .tracks import Playlist, Track, VoiceState
 from .types import JsonObject
@@ -135,6 +148,7 @@ class FluxPlayer(VoiceProtocol):
         self._voice_recovery_task: asyncio.Task[None] | None = None
         self._crossfade: Crossfade | None = None
         self._fade_task: asyncio.Task[None] | None = None
+        self._sponsorblock: SponsorBlockManager | None = None
         self._suppress_next_end = False
         self._autoplay_errors = 0
         self.inactive_timeout = getattr(self.node, "inactive_player_timeout", None)
@@ -1111,6 +1125,59 @@ class FluxPlayer(VoiceProtocol):
             self._crossfade = None
         self._cancel_volume_fade()
 
+    @property
+    def sponsorblock(self) -> SponsorBlockManager | None:
+        """The active SponsorBlock manager, if enabled."""
+
+        return self._sponsorblock
+
+    def enable_sponsorblock(
+        self,
+        config: SponsorBlockConfig | None = None,
+        *,
+        categories: Iterable[str] | None = None,
+        action: SponsorBlockAction = SponsorBlockAction.SKIP,
+        skip_margin: int = 250,
+    ) -> SponsorBlockManager:
+        """Enable SponsorBlock segment skipping and return the manager.
+
+        Segments are read from the current track's ``pluginInfo`` when present,
+        otherwise from the node's SponsorBlock plugin. Opt-in: without calling
+        this, playback is unchanged::
+
+            player.enable_sponsorblock()  # skip sponsor segments automatically
+        """
+
+        resolved = config or SponsorBlockConfig(
+            categories=tuple(categories) if categories is not None else DEFAULT_SPONSOR_CATEGORIES,
+            action=action,
+            skip_margin=skip_margin,
+        )
+        self._sponsorblock = SponsorBlockManager(self, config=resolved)
+        if self._current is not None:
+            self._sponsorblock.handle_track_start(self._current)
+        return self._sponsorblock
+
+    def disable_sponsorblock(self) -> None:
+        """Disable SponsorBlock skipping and cancel any in-flight fetch."""
+
+        if self._sponsorblock is not None:
+            self._sponsorblock.cancel()
+            self._sponsorblock = None
+
+    def _notify_sponsorblock_skip(self, segment: SponsorSegment, position: int) -> None:
+        manager = self._sponsorblock
+        skipped = manager is not None and manager.config.action is SponsorBlockAction.SKIP
+        event = SponsorBlockSkipEvent(
+            guild_id=self.guild.id,
+            segment=segment,
+            position=position,
+            skipped=skipped,
+            node_identifier=self.node.identifier,
+            player=self,
+        )
+        self._dispatch_client_event("sponsorblock_skip", event)
+
     async def fade_volume(
         self,
         target: int,
@@ -1557,13 +1624,24 @@ class FluxPlayer(VoiceProtocol):
         )
 
     async def destroy(self) -> None:
-        """Destroy the Lavalink player and invalidate local playback state."""
+        """Destroy the Lavalink player and invalidate local playback state.
+
+        Teardown is best-effort: if the node cannot be reached (for example a
+        transient REST timeout), FluxWave logs the failure and still clears the
+        local player so the bot does not get stuck on a dead session.
+        """
 
         if self._destroyed:
             return
 
         try:
             await self.node.destroy_player(self.guild.id)
+        except FluxWaveError as exc:
+            logger.warning(
+                "Failed to destroy Lavalink player for guild %s; clearing local state anyway: %s",
+                self.guild.id,
+                exc,
+            )
         finally:
             self._unregister_node_listeners()
             self.node.unregister_player(self.guild.id)
@@ -1578,12 +1656,23 @@ class FluxPlayer(VoiceProtocol):
             self._cancel_volume_fade()
             if self._crossfade is not None:
                 self._crossfade.cancel()
+            if self._sponsorblock is not None:
+                self._sponsorblock.cancel()
             self._clear_autoplay_state()
             self._last_position = 0
             self._last_update_ms = None
             self._paused = False
             self._suppress_next_end = False
             self._autoplay_errors = 0
+            self._dispatch_client_event(
+                "disconnect",
+                PlayerDisconnectEvent(
+                    guild_id=self.guild.id,
+                    node_identifier=self.node.identifier,
+                    player=self,
+                    reason="destroyed",
+                ),
+            )
 
     async def _dispatch_voice_update(self) -> None:
         if (
@@ -1617,8 +1706,23 @@ class FluxPlayer(VoiceProtocol):
                 return
 
             self._connection_error = None
+            was_connected = self._connected
             self._connected = True
             self._connection_event.set()
+            if not was_connected:
+                self._dispatch_client_event(
+                    "connect",
+                    PlayerConnectEvent(
+                        guild_id=self.guild.id,
+                        channel_id=(
+                            int(self._voice_channel_id)
+                            if self._voice_channel_id is not None
+                            else None
+                        ),
+                        node_identifier=self.node.identifier,
+                        player=self,
+                    ),
+                )
 
     def _on_node_track_start(self, event: object) -> None:
         if not isinstance(event, TrackStartEvent) or event.guild_id != self.guild.id:
@@ -1630,6 +1734,8 @@ class FluxPlayer(VoiceProtocol):
         self._last_update_ms = int(time.monotonic() * 1000)
         self._paused = False
         self._cancel_inactivity_timer()
+        if self._sponsorblock is not None:
+            self._sponsorblock.handle_track_start(event.track)
         self._dispatch_client_event("track_start", event)
 
     def _on_node_track_end(self, event: object) -> None:
@@ -1693,6 +1799,8 @@ class FluxPlayer(VoiceProtocol):
         self._last_position = event.state.position
         self._last_update_ms = int(time.monotonic() * 1000)
         self._last_ping = event.state.ping
+        if self._sponsorblock is not None:
+            self._sponsorblock.handle_player_update(event.state.position)
         self._dispatch_client_event("player_update", event)
 
     def _on_node_websocket_closed(self, event: object) -> None:

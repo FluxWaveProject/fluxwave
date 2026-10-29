@@ -38,7 +38,9 @@ result = await fluxwave.Pool.search("https://www.youtube.com/watch?v=...")  # lo
 Raw Lavalink identifiers can be loaded with `source=None`:
 
 ```python
-result = await fluxwave.Pool.search_result("encoded-or-plugin-id", source=None)  # load a raw Lavalink identifier
+result = await fluxwave.Pool.search_result(
+    "encoded-or-plugin-id", source=None
+)  # load a raw Lavalink identifier
 ```
 
 (search-vs-search-result)=
@@ -69,13 +71,17 @@ tracks = await fluxwave.Track.search("lofi", source="ytmsearch")  # search YouTu
 Pass a node or pool-like object when you do not want the global pool:
 
 ```python
-tracks = await fluxwave.Track.search("lofi", node=my_node)  # search using a specific node instead of the pool
+tracks = await fluxwave.Track.search(
+    "lofi", node=my_node
+)  # search using a specific node instead of the pool
 ```
 
 ## Playlist Handling
 
 ```python
-result = await player.enqueue(playlist_or_url, shuffle=True, limit=50)  # queue a playlist, shuffled and capped at 50 tracks
+result = await player.enqueue(
+    playlist_or_url, shuffle=True, limit=50
+)  # queue a playlist, shuffled and capped at 50 tracks
 ```
 
 Playlists preserve metadata:
@@ -84,7 +90,9 @@ Playlists preserve metadata:
 playlist.name  # the playlist's title
 playlist.selected  # index of the track Lavalink marked as selected
 playlist.metadata  # extra playlist info from the source
-playlist.playable_tracks(shuffle=True, limit=25)  # get up to 25 tracks, shuffled, selected track first
+playlist.playable_tracks(
+    shuffle=True, limit=25
+)  # get up to 25 tracks, shuffled, selected track first
 ```
 
 Selected tracks are moved first by default when queueing through
@@ -110,7 +118,9 @@ Attach filters to searched tracks:
 
 ```python
 filters = fluxwave.Filters().nightcore()  # build a nightcore audio filter
-result = await player.enqueue("artist song", filters=filters)  # search and queue with filters attached
+result = await player.enqueue(
+    "artist song", filters=filters
+)  # search and queue with filters attached
 ```
 
 When the queued track plays later, FluxWave applies the attached filters
@@ -143,7 +153,9 @@ Behavior:
 ## Populate Recommendations
 
 ```python
-added = await player.populate_autoplay(limit=5)  # fetch up to 5 recommended tracks into the auto queue
+added = await player.populate_autoplay(
+    limit=5
+)  # fetch up to 5 recommended tracks into the auto queue
 ```
 
 FluxWave uses:

@@ -28,9 +28,29 @@ class FakeRest:
         self.calls = 0
         self.sessions: list[tuple[str, fluxwave.SessionUpdate]] = []
         self.version = "4.0.0"
+        self.info_payload: object = None
+        self.destroy_calls: list[int] = []
+        self.destroy_error: Exception | None = None
 
     async def fetch_version(self) -> str:
         return self.version
+
+    async def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, str] | None = None,
+        json: dict[str, object] | None = None,
+    ) -> object:
+        if method == "GET" and path == "/v4/info":
+            return self.info_payload
+        raise AssertionError(f"unexpected request {method} {path}")
+
+    async def destroy_player(self, session_id: str, guild_id: int) -> None:
+        self.destroy_calls.append(guild_id)
+        if self.destroy_error is not None:
+            raise self.destroy_error
 
     async def load_tracks(self, identifier: str) -> fluxwave.LoadResult:
         self.calls += 1
@@ -486,14 +506,105 @@ async def test_node_validate_lavalink_version_strict_rejects_newer_v4() -> None:
         await node.validate_lavalink_version()
 
 
-async def test_node_validate_lavalink_version_rejects_unparseable_version() -> None:
+async def test_node_validate_lavalink_version_rejects_unparseable_version_in_strict_mode() -> None:
     node = make_node("version-bad")
+    node.strict_version_check = True
     rest = FakeRest()
     rest.version = "definitely not semver"
     node.rest = rest  # type: ignore[assignment]
 
     with pytest.raises(fluxwave.UnsupportedLavalinkVersion):
         await node.validate_lavalink_version()
+
+
+async def test_node_validate_lavalink_version_falls_back_to_info() -> None:
+    node = make_node("version-info")
+    rest = FakeRest()
+    rest.version = "NodeLink/1.0"
+    rest.info_payload = {"version": {"semver": "4.1.0"}}
+    node.rest = rest  # type: ignore[assignment]
+
+    check = await node.validate_lavalink_version()
+
+    assert check.supported
+    assert node.lavalink_version is not None
+    assert node.lavalink_version.base == (4, 1, 0)
+
+
+async def test_node_validate_lavalink_version_falls_back_to_numeric_info() -> None:
+    node = make_node("version-info-numbers")
+    rest = FakeRest()
+    rest.version = "NodeLink/1.0"
+    rest.info_payload = {"version": {"major": 4, "minor": 0, "patch": 3}}
+    node.rest = rest  # type: ignore[assignment]
+
+    check = await node.validate_lavalink_version()
+
+    assert check.supported
+    assert node.lavalink_version is not None
+    assert node.lavalink_version.base == (4, 0, 3)
+
+
+async def test_node_validate_lavalink_version_detects_nodelink() -> None:
+    node = make_node("version-nodelink")
+    node.strict_version_check = True
+    rest = FakeRest()
+    rest.version = "v4-absbdud"
+    rest.info_payload = {
+        "isNodelink": True,
+        "version": {"semver": "3.3.0", "major": 3, "minor": 3, "patch": 0},
+    }
+    node.rest = rest  # type: ignore[assignment]
+
+    check = await node.validate_lavalink_version()
+
+    assert check.supported
+    assert check.warning is None
+    assert node.lavalink_version is not None
+    assert node.lavalink_version.base == (4, 0, 0)
+    assert str(node.lavalink_version) == "NodeLink 3.3.0"
+
+
+async def test_node_validate_lavalink_version_prefers_nodelink_info_over_v3_version() -> None:
+    node = make_node("version-nodelink-v3")
+    rest = FakeRest()
+    rest.version = "3.3.0"
+    rest.info_payload = {"isNodelink": True, "version": {"semver": "3.3.0"}}
+    node.rest = rest  # type: ignore[assignment]
+
+    check = await node.validate_lavalink_version()
+
+    assert check.supported
+    assert node.lavalink_version is not None
+    assert node.lavalink_version.base == (4, 0, 0)
+
+
+async def test_node_validate_lavalink_version_warns_when_version_is_unknown() -> None:
+    node = make_node("version-unknown")
+    rest = FakeRest()
+    rest.version = "NodeLink/1.0"
+    node.rest = rest  # type: ignore[assignment]
+
+    with pytest.warns(fluxwave.LavalinkVersionWarning):
+        check = await node.validate_lavalink_version()
+
+    assert check.supported
+    assert node.lavalink_version is not None
+    assert node.lavalink_version.base == (4, 0, 0)
+
+
+async def test_node_destroy_player_clears_registry_when_rest_fails() -> None:
+    node = make_node("destroy-fail", players=1)
+    node.session_id = "session"
+    rest = FakeRest()
+    rest.destroy_error = fluxwave.NodeError("boom")
+    node.rest = rest  # type: ignore[assignment]
+
+    with pytest.raises(fluxwave.NodeError):
+        await node.destroy_player(0)
+
+    assert rest.destroy_calls == [0]
+    assert 0 not in node.players
 
 
 async def test_node_pool_cache_reuses_load_results() -> None:
@@ -948,3 +1059,52 @@ async def test_websocket_connect_raises_connection_error_after_retries() -> None
         await websocket.connect()
 
     assert node.status is fluxwave.NodeStatus.DISCONNECTED
+
+
+async def test_node_dispatch_forwards_lifecycle_events_to_local_and_global_listeners() -> None:
+    node = make_node("dispatch")
+    local: list[object] = []
+    global_events: list[tuple[str, object]] = []
+
+    node.on("node_ready", local.append)
+
+    @fluxwave.listen("node_ready")
+    def on_plain(payload: object) -> None:
+        global_events.append(("plain", payload))
+
+    @fluxwave.listen("fluxwave_node_ready")
+    def on_fluxwave(payload: object) -> None:
+        global_events.append(("fluxwave", payload))
+
+    @fluxwave.listen("wavelink_node_ready")
+    def on_wavelink(payload: object) -> None:
+        global_events.append(("wavelink", payload))
+
+    payload = fluxwave.NodeReadyEvent("dispatch", session_id="session", resumed=False)
+    node.dispatch(fluxwave.EventType.NODE_READY, payload)
+    await asyncio.sleep(0)
+
+    assert local == [payload]
+    assert [kind for kind, _ in global_events] == ["plain", "fluxwave", "wavelink"]
+    assert all(event is payload for _, event in global_events)
+
+    fluxwave.remove_listener("node_ready", on_plain)
+    fluxwave.remove_listener("fluxwave_node_ready", on_fluxwave)
+    fluxwave.remove_listener("wavelink_node_ready", on_wavelink)
+    await fluxwave.close_listeners()
+
+
+async def test_node_dispatch_keeps_player_events_local() -> None:
+    node = make_node("local")
+    received: list[object] = []
+
+    @fluxwave.listen("track_start")
+    def on_track_start(payload: object) -> None:
+        received.append(payload)
+
+    node.dispatch("track_start", object())
+    await asyncio.sleep(0)
+
+    assert received == []
+    fluxwave.remove_listener("track_start", on_track_start)
+    await fluxwave.close_listeners()

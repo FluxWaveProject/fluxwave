@@ -82,7 +82,9 @@ lyrics = await node.plugins.lyrics.track(encoded_track)  # lyrics for a specific
 FluxWave exposes LavaSrc helpers through `node.plugins`:
 
 ```python
-payload = await node.plugins.lavasrc.search("artist track", source="spsearch")  # search via LavaSrc (spsearch = Spotify)
+payload = await node.plugins.lavasrc.search(
+    "artist track", source="spsearch"
+)  # search via LavaSrc (spsearch = Spotify)
 ```
 
 The exact response depends on the plugin installed on your Lavalink server.

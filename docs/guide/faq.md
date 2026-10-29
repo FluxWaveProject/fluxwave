@@ -67,7 +67,9 @@ null
 That usually means the request was accepted. Check enabled categories with:
 
 ```python
-await node.plugins.sponsorblock.categories(guild_id)  # list enabled SponsorBlock categories for the guild
+await node.plugins.sponsorblock.categories(
+    guild_id
+)  # list enabled SponsorBlock categories for the guild
 ```
 
 ## How do I disable autoplay?

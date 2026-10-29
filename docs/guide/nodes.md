@@ -81,7 +81,10 @@ The default strategy order is location, shard, then usage. You can override it:
 node = fluxwave.Pool.select_node(
     guild_id=ctx.guild.id,
     shard_count=bot.shard_count,
-    strategies=[fluxwave.NodeSelectionStrategy.SHARD, fluxwave.NodeSelectionStrategy.USAGE],  # custom selection order: shard match then least usage
+    strategies=[
+        fluxwave.NodeSelectionStrategy.SHARD,
+        fluxwave.NodeSelectionStrategy.USAGE,
+    ],  # custom selection order: shard match then least usage
 )
 ```
 
@@ -110,6 +113,11 @@ node = fluxwave.Node(
 )
 await node.connect()  # connect this single node directly
 ```
+
+NodeLink and similar servers identify themselves through `/v4/info`
+(`isNodelink`) and are treated as v4-compatible, even though their reported
+version number is their own rather than a Lavalink version. `NodeInfo` exposes
+this as `is_nodelink`.
 
 Newer v4 builds than FluxWave's tested target emit `LavalinkVersionWarning` by
 default. For locked-down production deployments, make that warning fatal:
@@ -153,7 +161,9 @@ await fluxwave.Pool.handle_node_failure(node)  # migrate live players off the fa
 Before planned maintenance:
 
 ```python
-await fluxwave.Pool.drain(node, cooldown=300)  # move players off node and blacklist it during maintenance
+await fluxwave.Pool.drain(
+    node, cooldown=300
+)  # move players off node and blacklist it during maintenance
 await node.close()  # disconnect the drained node
 ```
 
@@ -161,7 +171,9 @@ await node.close()  # disconnect the drained node
 
 ```python
 results = await fluxwave.Pool.search_all("ytsearch:lofi")  # query every node, one result per node
-tracks = [track for result in results for track in result.tracks]  # flatten all tracks into one list
+tracks = [
+    track for result in results for track in result.tracks
+]  # flatten all tracks into one list
 ```
 
 This is useful when nodes have different source-manager plugins.
@@ -170,8 +182,12 @@ This is useful when nodes have different source-manager plugins.
 
 ```python
 router = fluxwave.SourceRouter()  # create a rule set mapping search prefixes to nodes
-router.add("spsearch:*", node_identifier="spotify-node", priority=10)  # route Spotify searches to spotify-node
-router.add("ytsearch:*", node_identifier="youtube-node", priority=5)  # route YouTube searches to youtube-node
+router.add(
+    "spsearch:*", node_identifier="spotify-node", priority=10
+)  # route Spotify searches to spotify-node
+router.add(
+    "ytsearch:*", node_identifier="youtube-node", priority=5
+)  # route YouTube searches to youtube-node
 fluxwave.Pool.set_router(router)  # make the pool use this router for searches
 ```
 
@@ -180,14 +196,20 @@ automatically when you do not pass `node=`. This lets Spotify, YouTube,
 SoundCloud, and plugin-specific searches prefer different Lavalink nodes.
 
 ```python
-spotify_tracks = await fluxwave.Pool.search("artist track", source="spsearch")  # routed to spotify-node
-youtube_tracks = await fluxwave.Pool.search("artist track", source="ytsearch")  # routed to youtube-node
+spotify_tracks = await fluxwave.Pool.search(
+    "artist track", source="spsearch"
+)  # routed to spotify-node
+youtube_tracks = await fluxwave.Pool.search(
+    "artist track", source="ytsearch"
+)  # routed to youtube-node
 ```
 
 You can also resolve routes manually for custom workflows:
 
 ```python
-node = fluxwave.Pool.router().resolve("spsearch:artist track", fluxwave.Pool.nodes())  # manually pick the node for a query
+node = fluxwave.Pool.router().resolve(
+    "spsearch:artist track", fluxwave.Pool.nodes()
+)  # manually pick the node for a query
 ```
 
 ## Route Planner

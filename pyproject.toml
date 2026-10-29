@@ -4,13 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fluxwave"
-version = "0.2.2"
+version = "0.3.0"
 description = "A modern async Lavalink client library for Python Discord music bots."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
-    { name = "FluxWave Contributors" },
+    { name = "NobitaDeveloper" },
+    { name = "wanderer-npm" },
 ]
 keywords = ["discord", "lavalink", "music", "asyncio", "bot"]
 classifiers = [
@@ -43,6 +44,7 @@ dev = [
     "mypy>=1.13",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    "pytest-cov>=6",
     "ruff>=0.8",
 ]
 docs = [
@@ -64,8 +66,24 @@ packages = ["src/fluxwave"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "--cov=fluxwave --cov-report=term-missing"
 markers = [
     "integration: tests that require an external Lavalink server",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src/fluxwave"]
+
+[tool.coverage.report]
+# Keep the gate honest while allowing a little headroom for platform-specific
+# and integration-only paths.
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
 ]
 
 [tool.ruff]

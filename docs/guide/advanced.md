@@ -17,7 +17,9 @@ Each node exposes `node.plugins`.
 
 ```python
 lyrics_payload = await node.plugins.lyrics.current(guild_id)  # fetch lyrics for the playing track
-await node.plugins.sponsorblock.set_categories(guild_id, ["sponsor", "intro"])  # auto-skip these segments
+await node.plugins.sponsorblock.set_categories(
+    guild_id, ["sponsor", "intro"]
+)  # auto-skip these segments
 ```
 
 For custom plugin routes:
@@ -29,7 +31,9 @@ response = await node.send("GET", path="/v4/plugin/custom")  # call any custom L
 ## Autoplay
 
 ```python
-player.autoplay = fluxwave.AutoPlayMode.ENABLED  # keep playing recommended tracks when queue empties
+player.autoplay = (
+    fluxwave.AutoPlayMode.ENABLED
+)  # keep playing recommended tracks when queue empties
 await player.populate_autoplay(limit=5)  # pre-fill the queue with up to 5 recommendations
 ```
 
@@ -66,7 +70,9 @@ Tracing stores structured debug events in an in-memory ring buffer.
 
 ```python
 class RedisStore:
-    async def save(self, guild_id: int, state: fluxwave.PersistedState) -> None:  # persist a guild's state
+    async def save(
+        self, guild_id: int, state: fluxwave.PersistedState
+    ) -> None:  # persist a guild's state
         ...
 
     async def load(self, guild_id: int) -> fluxwave.PersistedState | None:  # read it back (or None)
@@ -85,7 +91,9 @@ router = fluxwave.SourceRouter()
 router.add("spsearch:*", "spotify-node", priority=10)  # route Spotify queries to this node
 router.add("ytsearch:*", "youtube-node", priority=5)  # route YouTube queries to this node
 
-node = router.resolve("spsearch:artist track", fluxwave.Pool.nodes())  # pick the node for this query
+node = router.resolve(
+    "spsearch:artist track", fluxwave.Pool.nodes()
+)  # pick the node for this query
 ```
 
 ## Real Soak Testing
